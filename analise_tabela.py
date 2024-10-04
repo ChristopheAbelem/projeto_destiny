@@ -126,21 +126,32 @@ with col5:
     plt.tight_layout()
     st.pyplot(fig, use_container_width=True)
 
-# Análise de destinos mais visitados
+# Substituição do gráfico "Top 10 Destinos Mais Visitados"
 df_cleaned = df.dropna(subset=['Approximate Annual Tourists'])
 
 
 def convert_to_numeric(value):
     if isinstance(value, str):
-        value = value.replace('million', '').replace(',', '').strip()
-        if '-' in value:
-            value = value.split('-')[-1].strip()
-        return float(value) * 1_000_000
-    return float(value) if value else None
+        value = value.strip()
+        if not all(c.isdigit() or c in [' ', 'm', 'M', 'i', 'I', 'l', 'L', 'o', 'O', 'n', 'N', '-', ',', '(', ')'] for c in value):
+            return None
+        if 'million' in value:
+            value = value.replace('million', '').strip()
+            value = value.replace(',', '')
+            if '-' in value:
+                value = value.split('-')[-1].strip()
+            return float(value) * 1_000_000
+        else:
+            value = value.replace(',', '')
+            return float(value)
+    try:
+        return float(value)
+    except ValueError:
+        return None
 
 
-df_cleaned['Approximate Annual Tourists'] = pd.to_numeric(
-    df_cleaned['Approximate Annual Tourists'], errors='coerce')
+df_cleaned['Approximate Annual Tourists'] = df_cleaned['Approximate Annual Tourists'].apply(
+    convert_to_numeric)
 df_cleaned = df_cleaned.dropna(subset=['Approximate Annual Tourists'])
 
 tourist_counts = df_cleaned.groupby(['Destination', 'Country'])[
@@ -148,14 +159,47 @@ tourist_counts = df_cleaned.groupby(['Destination', 'Country'])[
 top_destinations = tourist_counts.sort_values(
     by='Approximate Annual Tourists', ascending=False).head(10)
 
+total_tourists = top_destinations['Approximate Annual Tourists'].sum()
+top_destinations['Percentage'] = (
+    top_destinations['Approximate Annual Tourists'] / total_tourists) * 100
+
+country_colors = {
+    'France': 'skyblue',
+    'United Kingdom': 'pink',
+    'Turkey': 'purple',
+    'Italy': 'lightcoral',
+    'Germany': 'lightgreen',
+    'Spain': 'lightsalmon',
+    'Russia': 'brown',
+}
+
 with col6:
     st.subheader('Top 10 Destinos Mais Visitados')
-    fig, ax = plt.subplots(figsize=(5, 5))
-    plt.bar(top_destinations['Destination'],
-            top_destinations['Approximate Annual Tourists'], color='lightblue')
+    fig, ax = plt.subplots(figsize=(12, 6))
+    bars = plt.bar(top_destinations['Destination'], top_destinations['Approximate Annual Tourists'], color=[
+                   country_colors.get(country, 'grey') for country in top_destinations['Country']])
+
+    plt.title('Top 10 Most Visited Destinations')
+    plt.xlabel('Destination')
+    plt.ylabel('Approximate Annual Tourists')
+
+    sorted_countries = top_destinations.groupby(
+        'Country')['Percentage'].first().reset_index()
+    sorted_countries = sorted_countries.sort_values(
+        by='Percentage', ascending=False)
+
+    legend_labels = [f"{row['Country']} ({
+        row['Percentage']:.2f}%)" for _, row in sorted_countries.iterrows()]
+    handles = [plt.Rectangle((0, 0), 1, 1, color=country_colors.get(
+        country, 'grey')) for country in sorted_countries['Country']]
+
+    plt.legend(handles, legend_labels, title='Countries',
+               loc='upper left', bbox_to_anchor=(1, 1))
+
     plt.xticks(rotation=45)
     plt.tight_layout()
     st.pyplot(fig, use_container_width=True)
+
 
 # Análise de categorias de destinos mais visitados
 category_counts = df_cleaned.groupby(
